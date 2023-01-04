@@ -1,24 +1,24 @@
 ---
-- name: "Configure tasmota."
+
+- name: "Fail if there are too many backlog commands"
+  fail:
+    msg: "Too many backlog commands ({{ tasmota_backlog_commands | length }}), cannot be more than 30."
+  when: "tasmota_backlog_commands | length > 30"
+
+- name: "Configure tasmota"
   tasmota:
     command: "{{ item.command }}"
     value: "{{ item.value }}"
   no_log: "{{ item.no_log | default(omit) }}"
   with_items: "{{ tasmota_commands }}"
 
-- name: "Setup MQTT."
+- name: Test
+  debug:
+    msg: "{% for item in tasmota_backlog_commands %}{{ item.command }} {{ item.value }};{% endfor %}"
+
+# Have to do it this way, if one Backlog ist called while another one is running, the first one gets cancelled
+- name: "Run important commands as bulk via backlog"
   tasmota:
     command: "Backlog"
-    value: >
-      MqttHost {{ tasmota_mqtt_host }};
-      MqttPort {{ tasmota_mqtt_port }};
-      MqttUser {{ tasmota_mqtt_user }};
-      MqttPassword {{ tasmota_mqtt_password }};
-      MqttClient {{ tasmota_mqtt_client }};
-      Topic {{ tasmota_mqtt_topic }};
-      FullTopic {{ tasmota_mqtt_fulltopic }};
-  when: >
-    (tasmota_mqtt_user + tasmota_mqtt_password + tasmota_mqtt_host + tasmota_mqtt_port +
-    tasmota_mqtt_client + tasmota_mqtt_topic + tasmota_mqtt_fulltopic)
-    | length > 0
-  no_log: true
+    value: "{% for item in tasmota_backlog_commands %}{{ item.command }} {{ item.value }};{% endfor %}"
+  no_log: false
