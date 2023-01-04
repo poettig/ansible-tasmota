@@ -5,8 +5,6 @@ from __future__ import (absolute_import, division, print_function)
 
 __metaclass__ = type
 
-import time
-
 import requests
 import re
 import json
@@ -109,9 +107,6 @@ class ActionModule(ActionBase):
 
         # execute command
         status_response = session.get(url = endpoint_uri, params = status_params, timeout=2)
-
-        if not status_response:
-            raise AnsibleRuntimeError("Did not succeed getting current value in 5 tries.")
 
         # get response data
         data = status_response.json()
@@ -247,10 +242,6 @@ class ActionModule(ActionBase):
                     change_params.update( { 'cmnd' : ("%s %s" % (command, incoming_value)) } )
 
                 change_response = session.get(url = endpoint_uri, params = change_params, timeout=2)
-
-                if not change_response:
-                    raise AnsibleRuntimeError("Did not succeed changing value in 5 tries.")
-
                 if change_response.status_code != 200:
                     raise AnsibleRuntimeError("Unexpected response code: %s" % (change_response.status_code))
 
