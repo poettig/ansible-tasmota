@@ -12,10 +12,6 @@
   no_log: "{{ item.no_log | default(omit) }}"
   with_items: "{{ tasmota_commands }}"
 
-- name: Test
-  debug:
-    msg: "{% for item in tasmota_backlog_commands %}{{ item.command }} {{ item.value }};{% endfor %}"
-
 # Have to do it this way, if one Backlog ist called while another one is running, the first one gets cancelled
 - name: "Run important commands as bulk via backlog"
   tasmota:
