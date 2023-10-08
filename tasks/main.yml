@@ -2,8 +2,8 @@
 
 - name: "Fail if there are too many backlog commands"
   fail:
-    msg: "Too many backlog commands ({{ backlog_tasmota_commands | length }}), cannot be more than 30."
-  when: "backlog_tasmota_commands | length > 30"
+    msg: "Too many backlog commands ({{ tasmota_backlog_commands | length }}), cannot be more than 30."
+  when: "tasmota_backlog_commands | length > 30"
 
 - name: "Configure tasmota"
   tasmota:
@@ -16,5 +16,5 @@
 - name: "Run important commands as bulk via backlog"
   tasmota:
     command: "Backlog"
-    value: "{% for item in backlog_tasmota_commands %}{{ item.command }} {{ item.value }};{% endfor %}"
+    value: "{% for item in tasmota_backlog_commands %}{{ item.command }} {{ item.value }};{% endfor %}"
   no_log: false
