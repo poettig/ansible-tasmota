@@ -1,31 +1,27 @@
 #!/usr/bin/python
-# -*- coding: utf-8 -*-
 
-from __future__ import (absolute_import, division, print_function)
 
-__metaclass__ = type
+import copy
+import json
+import re
+import sys
 
 import requests
-import re
-import json
-import sys
-import copy
-
-from urllib3.util import Retry
-from requests.adapters import HTTPAdapter
-
-from ansible.module_utils._text import to_native
+from ansible.errors import AnsibleAuthenticationFailure, AnsibleOptionsError, AnsibleRuntimeError
 from ansible.plugins.action import ActionBase
-from ansible.errors import AnsibleOptionsError, AnsibleAuthenticationFailure, AnsibleRuntimeError
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
 
 try:
     from __main__ import display
 except ImportError:
     from ansible.utils.display import Display
+
     display = Display()
 
 if sys.version_info[0] >= 3:
     unicode = str
+
 
 class ActionModule(ActionBase):
     TRANSFERS_FILES = False
@@ -39,20 +35,20 @@ class ActionModule(ActionBase):
             task_vars = dict()
 
         # uncomment to enable request debugging
-        #try:
+        # try:
         #    import http.client as http_client
-        #except ImportError:
+        # except ImportError:
         #    # Python 2
         #    import httplib as http_client
         #    http_client.HTTPConnection.debuglevel = 1
-##
-        #import logging
-        #logLevel = logging.DEBUG
-        #logging.basicConfig()
-        #logging.getLogger().setLevel(logLevel)
-        #requests_log = logging.getLogger("requests.packages.urllib3")
-        #requests_log.setLevel(logLevel)
-        #requests_log.propagate = True
+        ##
+        # import logging
+        # logLevel = logging.DEBUG
+        # logging.basicConfig()
+        # logging.getLogger().setLevel(logLevel)
+        # requests_log = logging.getLogger("requests.packages.urllib3")
+        # requests_log.setLevel(logLevel)
+        # requests_log.propagate = True
 
         result = super(ActionModule, self).run(tmp, task_vars)
 
@@ -61,28 +57,27 @@ class ActionModule(ActionBase):
         no_log = self._play_context.no_log
 
         if not no_log:
-          display.v("args: %s" % (self._task.args))
+            display.v("args: %s" % (self._task.args))
 
-        check_mode = task_vars['ansible_check_mode']
+        check_mode = task_vars["ansible_check_mode"]
         display.v("check_mode: %s" % (check_mode))
 
         try:
             # Get the tasmota host
-            tasmota_host = self._get_arg_or_var('tasmota_host', task_vars['ansible_host'])
-            command = self._get_arg_or_var('command')
-            incoming_value = self._get_arg_or_var('value', None, False)
+            tasmota_host = self._get_arg_or_var("tasmota_host", task_vars["ansible_host"])
+            command = self._get_arg_or_var("command")
+            incoming_value = self._get_arg_or_var("value", None, False)
 
             if incoming_value is None:
+                # early return when incoming_value is not provided
+                result["changed"] = False
+                result["skipped"] = True
 
-              # early return when incoming_value is not provided
-              result["changed"] = False
-              result["skipped"] = True
-
-              return result
+                return result
 
         except Exception as err:
             display.v("got an exception: %s" % (err))
-            display.v("got an exception: "+err.message)
+            display.v("got an exception: " + err.message)
             return self._fail_result(result, "error during retrieving parameter '%s'" % (err.message))
 
         if not no_log:
@@ -91,8 +86,8 @@ class ActionModule(ActionBase):
         auth_params = {}
         try:
             user = self._get_arg_or_var("tasmota_user")
-            password = self._get_arg_or_var('tasmota_password')
-            auth_params = { 'user' : user, 'password' : password }
+            password = self._get_arg_or_var("tasmota_password")
+            auth_params = {"user": user, "password": password}
             display.v("authentication parameters: %s" % (auth_params))
         except:
             pass
@@ -103,10 +98,10 @@ class ActionModule(ActionBase):
 
         endpoint_uri = "http://%s/cm" % (tasmota_host)
         status_params = copy.deepcopy(auth_params)
-        status_params.update( {'cmnd' : command } )
+        status_params.update({"cmnd": command})
 
         # execute command
-        status_response = session.get(url = endpoint_uri, params = status_params, timeout=2)
+        status_response = session.get(url=endpoint_uri, params=status_params, timeout=2)
 
         # get response data
         data = status_response.json()
@@ -125,7 +120,7 @@ class ActionModule(ActionBase):
 
         existing_value = unicode(data.get(command))
 
-        if (command.startswith('Rule')):
+        if command.startswith("Rule"):
             display.vv("rule found!")
             existing_rule = data.get(command)
             if isinstance(existing_rule, dict):
@@ -150,37 +145,37 @@ class ActionModule(ActionBase):
             existing_once = existing_rule.get("Once")
             existing_rules = existing_rule.get("Rules")
             existing_stop_on_error = existing_rule.get("StopOnError")
-            if str(incoming_value) in ["0","1","2"]:
+            if str(incoming_value) in ["0", "1", "2"]:
                 display.vv("disable, enable, toggle rule found")
                 existing_value = self._translateResultStr(existing_state)
-            elif str(incoming_value) in ["4","5","6"]:
+            elif str(incoming_value) in ["4", "5", "6"]:
                 display.vv("disable, enable, toggle oneshot")
                 existing_value = self._translateResultStr(existing_once, "4", "5")
-            elif str(incoming_value) in ["8","9","10"]:
+            elif str(incoming_value) in ["8", "9", "10"]:
                 display.vv("disable, enable, toggle stop-on-error")
                 existing_value = self._translateResultStr(existing_stop_on_error, "8", "9")
             elif str(incoming_value).lower().startswith("on"):
                 display.vv("rule value found")
                 existing_value = existing_rules
-        elif (command.startswith('SetOption')):
+        elif (
+            (command.startswith("SetOption"))
+            or (command.startswith("PowerRetain"))
+            or (command.startswith("SensorRetain"))
+        ):
             existing_value = self._translateResultStr(existing_value)
-        elif (command.startswith('PowerRetain')):
-            existing_value = self._translateResultStr(existing_value)
-        elif (command.startswith('SensorRetain')):
-            existing_value = self._translateResultStr(existing_value)
-        elif (command == 'Module'):
+        elif command == "Module":
             modules_ids = data.get(command).keys()
             existing_value = next(iter(modules_ids))
-        elif (command.startswith('Gpio')):
+        elif command.startswith("Gpio"):
             gpios = data.get(command.upper()).keys()
             existing_value = next(iter(gpios))
-        elif (command == 'Template'):
+        elif command == "Template":
             existing_value = data
-        elif (command.startswith('Timers')):
-            existing_value = self._translateResultStr(data.get('Timers'))
-        elif (re.findall('Timer\d', command)):
+        elif command.startswith("Timers"):
+            existing_value = self._translateResultStr(data.get("Timers"))
+        elif re.findall(r"Timer\d", command):
             existing_value = data.get(command)
-        elif (command == 'TimeStd' or command == 'TimeDst' ):
+        elif command == "TimeStd" or command == "TimeDst":
             display.vv("TimeStd/TimeDst found!")
             existing_data = data.get(command)
             existing_day = existing_data.get("Day")
@@ -189,20 +184,28 @@ class ActionModule(ActionBase):
             existing_month = existing_data.get("Month")
             existing_offset = existing_data.get("Offset")
             existing_week = existing_data.get("Week")
-            existing_value = "%s,%s,%s,%s,%s,%s" % (existing_hemisphere, existing_week, existing_month, existing_day, existing_hour, existing_offset)
-        elif (command == 'TuyaMCU'):
+            existing_value = "%s,%s,%s,%s,%s,%s" % (
+                existing_hemisphere,
+                existing_week,
+                existing_month,
+                existing_day,
+                existing_hour,
+                existing_offset,
+            )
+        elif command == "TuyaMCU":
             # Return only relevant subset of fn/dp ids, ignoring the rest
             try:
-                fn_id, dp_id = (int(x) for x in incoming_value.split(','))
+                fn_id, dp_id = (int(x) for x in incoming_value.split(","))
             except Exception as e:
                 raise AnsibleOptionsError("Invalid value '%s' for TuyaMCU: %s" % (incoming_value, e))
 
             try:
-                def our_entry(x):
-                    return fn_id == x['fnId'] or dp_id == x['dpId']
 
-                relevant_entries = list(filter(our_entry, data['TuyaMCU']))
-                relevant_entries = ["%s,%s" % (x['fnId'], x['dpId']) for x in relevant_entries]
+                def our_entry(x):
+                    return fn_id == x["fnId"] or dp_id == x["dpId"]
+
+                relevant_entries = list(filter(our_entry, data["TuyaMCU"]))
+                relevant_entries = ["%s,%s" % (x["fnId"], x["dpId"]) for x in relevant_entries]
             except KeyError as e:
                 raise AnsibleRuntimeError("Invalid response: %s, error: %s" % (data, e))
 
@@ -217,15 +220,18 @@ class ActionModule(ActionBase):
                     existing_value = incoming_value
                 else:
                     existing_value = relevant_entries
-        elif (command == 'DimmerRange'):
+        elif command == "DimmerRange":
             try:
-                existing_value = "%s,%s" % (data[command]['Min'],data[command]['Max'])
+                existing_value = "%s,%s" % (data[command]["Min"], data[command]["Max"])
             except Exception as e:
                 raise AnsibleRuntimeError("Invalid response payload: %s, error: %s" % (data, e))
-        elif command.startswith('PulseTime'):
-            existing_value = unicode(data[command]['Set'])
+        elif command.startswith("PulseTime"):
+            existing_value = unicode(data[command]["Set"])
 
-        display.v("[%s] command: %s,\n\t existing_value: '%s',\n\t incoming_value: '%s'" % (tasmota_host, command, existing_value, incoming_value if not no_log else ""))
+        display.v(
+            "[%s] command: %s,\n\t existing_value: '%s',\n\t incoming_value: '%s'"
+            % (tasmota_host, command, existing_value, incoming_value if not no_log else "")
+        )
 
         display.v("[%s] existing_uri: %s" % (tasmota_host, endpoint_uri))
 
@@ -237,13 +243,13 @@ class ActionModule(ActionBase):
 
                 # encode json if required
                 if isinstance(incoming_value, dict):
-                    change_params.update( { 'cmnd' : ("%s %s" % (command, json.dumps(incoming_value))) } )
-                elif incoming_value == '':
-                    change_params.update( { 'cmnd' : ("%s \"\"" % (command)) } )
+                    change_params.update({"cmnd": ("%s %s" % (command, json.dumps(incoming_value)))})
+                elif incoming_value == "":
+                    change_params.update({"cmnd": ('%s ""' % (command))})
                 else:
-                    change_params.update( { 'cmnd' : ("%s %s" % (command, incoming_value)) } )
+                    change_params.update({"cmnd": ("%s %s" % (command, incoming_value))})
 
-                change_response = session.get(url = endpoint_uri, params = change_params, timeout=2)
+                change_response = session.get(url=endpoint_uri, params=change_params, timeout=2)
                 if change_response.status_code != 200:
                     raise AnsibleRuntimeError("Unexpected response code: %s" % (change_response.status_code))
 
@@ -266,8 +272,8 @@ class ActionModule(ActionBase):
     @staticmethod
     def _fail_result(result, message):
         display.v("_fail_result")
-        result['failed'] = True
-        result['msg'] = message
+        result["failed"] = True
+        result["msg"] = message
         return result
 
     def _get_arg_or_var(self, name, default=None, is_required=True):
@@ -278,10 +284,9 @@ class ActionModule(ActionBase):
             raise AnsibleOptionsError("parameter %s is required" % name)
         return ret
 
-    def _translateResultStr(self, translate, offValue = "0", onValue = "1"):
-        if (translate == "OFF"):
+    def _translateResultStr(self, translate, offValue="0", onValue="1"):
+        if translate == "OFF":
             return offValue
-        if (translate == "ON"):
+        if translate == "ON":
             return onValue
         return translate
-
